@@ -1,0 +1,21 @@
+
+### .gitignore
+
+```gitignore
+# Ignorar arquivos de configuração do sistema
+*.pyc
+__pycache__/
+
+# Ignorar arquivos do banco de dados
+escola.db
+
+# Ignorar arquivos de imagem
+*.jpg
+*.jpeg
+*.png
+
+# Ignorar arquivos de log
+*.log
+
+# Ignorar arquivos de ambiente virtual
+venv/
