@@ -1,0 +1,270 @@
+import sqlite3
+from tkinter import *
+from tkinter import messagebox
+from tkinter import filedialog
+from PIL import Image, ImageTk
+
+# Função para criar o banco de dados e tabelas
+def criar_banco():
+    conn = sqlite3.connect('escola.db')
+    c = conn.cursor()
+
+    c.execute('DROP TABLE IF EXISTS Alunos')
+    c.execute('DROP TABLE IF EXISTS Cursos')
+    c.execute('DROP TABLE IF EXISTS Notas')
+
+    c.execute('''
+        CREATE TABLE Alunos (
+            id_aluno INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            data_nascimento DATE NOT NULL,
+            endereco TEXT NOT NULL,
+            telefone_aluno TEXT,
+            telefone_responsavel TEXT,
+            serie TEXT,
+            turma TEXT,
+            foto BLOB
+        )
+    ''')
+
+    c.execute('''
+        CREATE TABLE Cursos (
+            id_curso INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome_curso TEXT NOT NULL,
+            descricao TEXT
+        )
+    ''')
+
+    c.execute('''
+        CREATE TABLE Notas (
+            id_nota INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_aluno INTEGER,
+            id_curso INTEGER,
+            nota REAL NOT NULL,
+            FOREIGN KEY (id_aluno) REFERENCES Alunos(id_aluno),
+            FOREIGN KEY (id_curso) REFERENCES Cursos(id_curso)
+        )
+    ''')
+
+    # Inserir matérias padrão
+    materias = [
+        'História', 'Matemática', 'Português', 
+        'Inglês', 'Espanhol', 'Geografia', 
+        'Física', 'Filosofia', 'Religião'
+    ]
+    for materia in materias:
+        c.execute("INSERT INTO Cursos (nome_curso, descricao) VALUES (?, ?)", 
+                  (materia, "Descrição de " + materia))
+
+    conn.commit()
+    conn.close()
+
+# Função para adicionar aluno
+def adicionar_aluno():
+    nome = entry_nome.get()
+    data_nascimento = entry_data_nascimento.get()
+    endereco = entry_endereco.get()
+    telefone_aluno = entry_telefone_aluno.get()
+    telefone_responsavel = entry_telefone_responsavel.get()
+    serie = entry_serie.get()
+    turma = entry_turma.get()
+
+    if nome and data_nascimento and endereco:
+        foto = None
+        if caminho_foto:  # Se uma foto foi escolhida
+            with open(caminho_foto, 'rb') as file:
+                foto = file.read()
+
+        conn = sqlite3.connect('escola.db')
+        c = conn.cursor()
+        c.execute("INSERT INTO Alunos (nome, data_nascimento, endereco, telefone_aluno, telefone_responsavel, serie, turma, foto) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
+                  (nome, data_nascimento, endereco, telefone_aluno, telefone_responsavel, serie, turma, foto))
+        conn.commit()
+        conn.close()
+        messagebox.showinfo("Sucesso", "Aluno adicionado com sucesso!")
+    else:
+        messagebox.showwarning("Erro", "Por favor, preencha todos os campos.")
+
+# Função para listar alunos
+def listar_alunos():
+    conn = sqlite3.connect('escola.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM Alunos")
+    alunos = c.fetchall()
+    conn.close()
+
+    # Limpar a área de listagem
+    listbox.delete(0, END)
+    for aluno in alunos:
+        listbox.insert(END, f'ID: {aluno[0]}, Nome: {aluno[1]}, Série: {aluno[7]}, Turma: {aluno[8]}')
+
+# Função para adicionar nota
+def adicionar_nota():
+    nome_aluno = entry_nome_aluno_nota.get()
+    nome_materia = entry_nome_materia_nota.get()
+    nota = entry_nota.get()
+
+    if nome_aluno and nome_materia and nota:
+        conn = sqlite3.connect('escola.db')
+        c = conn.cursor()
+
+        # Obter o id do aluno
+        c.execute("SELECT id_aluno FROM Alunos WHERE nome = ?", (nome_aluno,))
+        aluno = c.fetchone()
+
+        # Obter o id do curso
+        c.execute("SELECT id_curso FROM Cursos WHERE nome_curso = ?", (nome_materia,))
+        curso = c.fetchone()
+
+        if aluno and curso:
+            c.execute("INSERT INTO Notas (id_aluno, id_curso, nota) VALUES (?, ?, ?)", 
+                      (aluno[0], curso[0], nota))
+            conn.commit()
+            messagebox.showinfo("Sucesso", "Nota adicionada com sucesso!")
+        else:
+            messagebox.showwarning("Erro", "Aluno ou matéria não encontrados.")
+
+        conn.close()
+    else:
+        messagebox.showwarning("Erro", "Por favor, preencha todos os campos.")
+
+# Função para calcular média das notas de um aluno
+def calcular_media():
+    nome_aluno = entry_nome_aluno_media.get()
+
+    if nome_aluno:
+        conn = sqlite3.connect('escola.db')
+        c = conn.cursor()
+
+        # Obter o id do aluno
+        c.execute("SELECT id_aluno FROM Alunos WHERE nome = ?", (nome_aluno,))
+        aluno = c.fetchone()
+
+        if aluno:
+            c.execute("SELECT AVG(nota) FROM Notas WHERE id_aluno = ?", (aluno[0],))
+            media = c.fetchone()[0]
+            if media is not None:
+                messagebox.showinfo("Média", f"A média das notas do aluno {nome_aluno} é: {media:.2f}")
+            else:
+                messagebox.showinfo("Média", "O aluno não possui notas.")
+        else:
+            messagebox.showwarning("Erro", "Aluno não encontrado.")
+
+        conn.close()
+    else:
+        messagebox.showwarning("Erro", "Por favor, insira o nome do aluno.")
+
+# Função para carregar a foto do aluno
+def carregar_foto():
+    global caminho_foto
+    caminho_foto = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg;*.jpeg;*.png")])
+    if caminho_foto:
+        img = Image.open(caminho_foto)
+        img = img.resize((100, 100), Image.ANTIALIAS)
+        img_tk = ImageTk.PhotoImage(img)
+        label_foto.config(image=img_tk)
+        label_foto.image = img_tk  # Manter referência da imagem
+
+# Interface gráfica
+root = Tk()
+root.title("Sistema de Registro de Alunos")
+root.geometry("800x800")
+root.configure(bg="#ffcccc")  # Cor de fundo vermelho claro
+
+caminho_foto = None  # Para armazenar o caminho da foto do aluno
+
+# Frame para adicionar alunos
+frame_adicionar_aluno = Frame(root, bg="#ffffff", padx=20, pady=20)
+frame_adicionar_aluno.pack(pady=10)
+
+Label(frame_adicionar_aluno, text="Adicionar Aluno", font=("Arial", 16), bg="#ffffff").grid(row=0, columnspan=2)
+
+Label(frame_adicionar_aluno, text="Nome:").grid(row=1, column=0, sticky=W)
+entry_nome = Entry(frame_adicionar_aluno, width=40)
+entry_nome.grid(row=1, column=1)
+
+Label(frame_adicionar_aluno, text="Data de Nascimento (YYYY-MM-DD):").grid(row=2, column=0, sticky=W)
+entry_data_nascimento = Entry(frame_adicionar_aluno, width=40)
+entry_data_nascimento.grid(row=2, column=1)
+
+Label(frame_adicionar_aluno, text="Endereço:").grid(row=3, column=0, sticky=W)
+entry_endereco = Entry(frame_adicionar_aluno, width=40)
+entry_endereco.grid(row=3, column=1)
+
+Label(frame_adicionar_aluno, text="Telefone do Aluno:").grid(row=4, column=0, sticky=W)
+entry_telefone_aluno = Entry(frame_adicionar_aluno, width=40)
+entry_telefone_aluno.grid(row=4, column=1)
+
+Label(frame_adicionar_aluno, text="Telefone do Responsável:").grid(row=5, column=0, sticky=W)
+entry_telefone_responsavel = Entry(frame_adicionar_aluno, width=40)
+entry_telefone_responsavel.grid(row=5, column=1)
+
+Label(frame_adicionar_aluno, text="Série:").grid(row=6, column=0, sticky=W)
+entry_serie = Entry(frame_adicionar_aluno, width=40)
+entry_serie.grid(row=6, column=1)
+
+Label(frame_adicionar_aluno, text="Turma:").grid(row=7, column=0, sticky=W)
+entry_turma = Entry(frame_adicionar_aluno, width=40)
+entry_turma.grid(row=7, column=1)
+
+botao_carregar_foto = Button(frame_adicionar_aluno, text="Carregar Foto", command=carregar_foto)
+botao_carregar_foto.grid(row=8, columnspan=2, pady=5)
+
+label_foto = Label(frame_adicionar_aluno)
+label_foto.grid(row=9, columnspan=2)
+
+botao_adicionar = Button(frame_adicionar_aluno, text="Adicionar Aluno", command=adicionar_aluno)
+botao_adicionar.grid(row=10, columnspan=2, pady=10)
+
+# Frame para listar alunos
+frame_listar_alunos = Frame(root, bg="#ffffff", padx=20, pady=20)
+frame_listar_alunos.pack(pady=10)
+
+Label(frame_listar_alunos, text="Listar Alunos", font=("Arial", 16), bg="#ffffff").pack()
+
+botao_listar = Button(frame_listar_alunos, text="Listar Alunos", command=listar_alunos)
+botao_listar.pack(pady=5)
+
+listbox = Listbox(frame_listar_alunos, width=80)
+listbox.pack(pady=5)
+
+# Frame para adicionar notas e calcular média lado a lado
+frame_nota_media = Frame(root, bg="#ffffff", padx=20, pady=20)
+frame_nota_media.pack(pady=10)
+
+# Frame para adicionar notas
+frame_adicionar_nota = Frame(frame_nota_media, bg="#ffffff")
+frame_adicionar_nota.pack(side=LEFT, padx=10)
+
+Label(frame_adicionar_nota, text="Adicionar Nota", font=("Arial", 16), bg="#ffffff").pack()
+Label(frame_adicionar_nota, text="Nome do Aluno:").pack()
+entry_nome_aluno_nota = Entry(frame_adicionar_nota, width=40)
+entry_nome_aluno_nota.pack(pady=5)
+
+Label(frame_adicionar_nota, text="Nome da Matéria:").pack()
+entry_nome_materia_nota = Entry(frame_adicionar_nota, width=40)
+entry_nome_materia_nota.pack(pady=5)
+
+Label(frame_adicionar_nota, text="Nota:").pack()
+entry_nota = Entry(frame_adicionar_nota, width=40)
+entry_nota.pack(pady=5)
+
+botao_adicionar_nota = Button(frame_adicionar_nota, text="Adicionar Nota", command=adicionar_nota)
+botao_adicionar_nota.pack(pady=10)
+
+# Frame para calcular média
+frame_calcular_media = Frame(frame_nota_media, bg="#ffffff")
+frame_calcular_media.pack(side=LEFT, padx=10)
+
+Label(frame_calcular_media, text="Calcular Média", font=("Arial", 16), bg="#ffffff").pack()
+Label(frame_calcular_media, text="Nome do Aluno:").pack()
+entry_nome_aluno_media = Entry(frame_calcular_media, width=40)
+entry_nome_aluno_media.pack(pady=5)
+
+botao_calcular_media = Button(frame_calcular_media, text="Calcular Média", command=calcular_media)
+botao_calcular_media.pack(pady=10)
+
+# Inicializar banco de dados
+criar_banco()
+
+root.mainloop()
